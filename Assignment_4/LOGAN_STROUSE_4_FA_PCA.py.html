@@ -1,0 +1,394 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
+import pandas as pd
+import numpy as np
+import statsmodels.formula.api as smf
+import matplotlib.pyplot as plt
+
+
+# In[ ]:
+
+
+import pandas as pd      
+import numpy as np   
+import matplotlib.pyplot as plt   
+from sklearn.decomposition import PCA, FactorAnalysis
+import statsmodels.formula.api as smf
+
+
+# In[ ]:
+
+
+train = pd.read_csv('AMES_TRAIN.csv')
+test = pd.read_csv('AMES_TEST_SFAM.csv')
+train.columns = [s.lower() for s in train.columns]
+test.columns = [s.lower() for s in test.columns]
+train['qualityindex'] = (train.overallqual*train.overallcond)
+train['totalsqftcalc'] = (train.bsmtfinsf1+train.bsmtfinsf2+train.grlivarea)
+train['pricesqfoot'] = (train['saleprice']/train['totalsqftcalc'])
+test['qualityindex'] = (test.overallqual*test.overallcond)
+test['totalsqftcalc'] = (test.bsmtfinsf1+test.bsmtfinsf2+test.grlivarea)
+test['pricesqfoot'] = (test['saleprice']/test['totalsqftcalc'])
+train=train.replace({'totalsqftcalc': {np.NaN : 10000}})
+train=train.replace({'lotarea': {np.NaN : 10000}})
+train=train.replace({'lotfrontage': {np.NaN : 10000}})
+test=test.replace({'totalsqftcalc': {np.NaN : 10000}})
+test=test.replace({'lotarea': {np.NaN : 10000}})
+test=test.replace({'lotfrontage': {np.NaN : 10000}})
+
+
+# In[ ]:
+
+
+test['Neighborhood_Group'] = np.nan
+#added due to later work with Neighborhood groupings
+
+
+# In[ ]:
+
+
+train = train[train['totalsqftcalc'] < 6000]
+train = train[train['salecondition'] == 'Normal']
+train = train[train['saleprice'] <= 500000]
+train = train[train['lotarea'] <= 25000]
+train = train[train['zoning'] != 'I']
+train = train[train['zoning'] != 'C']
+train = train[train['zoning'] != 'A']
+
+
+# In[ ]:
+
+
+X = train[['saleprice','qualityindex','totalsqftcalc','yearbuilt','lotarea','lotfrontage']].copy()
+X1 = train[['qualityindex','totalsqftcalc','yearbuilt','lotarea','lotfrontage']].copy()
+corr = X[X.columns].corr()
+corr
+
+
+# In[39]:
+
+
+cdata = test.loc[:,['saleprice','qualityindex','totalsqftcalc','yearbuilt','lotarea','lotfrontage']] 
+corr = cdata[cdata.columns].corr()
+print(corr)
+
+
+# In[42]:
+
+
+pca_data = test.loc[:,['qualityindex','totalsqftcalc','yearbuilt','lotarea','lotfrontage']] 
+pca = PCA()
+P = pca.fit(pca_data)
+
+
+# In[43]:
+
+
+np.set_printoptions(threshold=np.inf) 
+np.around([pca.components_], decimals=3)
+
+
+# In[44]:
+
+
+pca_explained_variance = pca.explained_variance_ratio_
+print('Proportion of variance explained:', pca_explained_variance)
+
+
+# In[45]:
+
+
+pca_data_cormat = np.corrcoef(pca_data.T)
+eigenvalues, eigenvectors = np.linalg.eig(pca_data_cormat)
+np.around([eigenvalues], decimals=3)
+
+
+# In[46]:
+
+
+print('Linear algebra demonstration: Proportion of variance explained: ',
+    eigenvalues/eigenvalues.sum())
+np.around([eigenvectors], decimals=3)
+
+
+# In[47]:
+
+
+plt.bar(np.arange(len(pca_explained_variance)), pca_explained_variance, 
+    color = 'dodgerblue', alpha = 0.8, align = 'center')
+plt.title('PCA Proportion of Total Variance')
+plt.show()
+
+
+# In[48]:
+
+
+d = {'eigenvalues': eigenvalues }
+df1 = pd.DataFrame(data=d)
+df2 =pd.Series([1,2,3,4,5,6,7,8,9])
+#df2 = {'factors': factors}
+# merge eigenvalues with # of factors
+result = pd.concat([df1, df2], axis=1, join_axes=[df2.index])
+print (result)
+
+def scat(dataframe,var1,var2):
+    dataframe[var2].plot()     
+    plt.title('Scree Plot')
+    plt.xlabel('# of factors')
+    plt.ylabel('Eigenvalues')
+    
+scat(result,'0','eigenvalues')
+#retain two factors
+plt.show()
+
+
+# In[49]:
+
+
+pca_loadings = pca.components_.T
+
+
+# In[50]:
+
+
+np.set_printoptions(precision = 3, suppress = True,
+    formatter={'float': '{: 0.3f}'.format})
+print(pca_loadings[:,0:3])
+
+
+# In[51]:
+
+
+C = pca.transform(pca_data)
+
+
+# In[108]:
+
+
+pca_data['pca1'] = C[:,0]
+pca_data['pca2'] = C[:,1]
+pca_data['pca3'] = C[:,2]
+
+
+# In[110]:
+
+
+pca_data
+
+
+# In[109]:
+
+
+test['pca1'] = C[:,0]
+test['pca2'] = C[:,1]
+test['pca3'] = C[:,2]
+print(test)
+test.to_csv('test_PCA_1.csv')
+
+
+# In[54]:
+
+
+pca_scores = pca_data.loc[:,['pca1','pca2', 'pca3']]
+pca_model_cormat =     np.corrcoef(pca_scores.as_matrix().transpose()).round(decimals=3)
+print(pca_model_cormat)
+
+
+# In[111]:
+
+
+PCA_2 = smf.ols(formula='saleprice ~ pca1+pca2', data=train).fit()
+PCA_2.summary()
+
+
+# In[64]:
+
+
+predictions_1 = PCA_2.fittedvalues
+predictions_1.head()
+
+
+# In[87]:
+
+
+test_predictions_1 = PCA_2.predict(test)
+d = {'p_saleprice': test_predictions_1}
+df1 = test[['index']]
+df2=pd.DataFrame(data=d)
+Strouse_TestPredictions_1 = pd.concat([df1,df2],axis = 1, join_axes=[df1.index])
+Strouse_TestPredictions_1.head()
+
+
+# In[69]:
+
+
+Strouse_TestPredictions_1.to_csv('HOUSES2_STROUSE_LOGAN.csv')
+
+
+# In[113]:
+
+
+fa = FactorAnalysis(n_components = 3, tol=1e-8, max_iter=1000000)
+fa.fit(pca_data)
+
+
+# In[114]:
+
+
+fa_loadings = fa.components_.T
+
+
+# In[115]:
+
+
+np.set_printoptions(precision = 3, suppress = True,
+    formatter={'float': '{: 0.3f}'.format})
+print(fa_loadings)
+
+
+# In[117]:
+
+
+F = fa.transform(pca_data)
+test['fa1'] = F[:,0]
+test['fa2'] = F[:,1]
+test['fa3'] = F[:,2]
+print(test)
+
+
+# In[86]:
+
+
+test.to_csv('HOUSESFA_STROUSE_LOGAN.csv')
+
+
+# In[119]:
+
+
+FA_MODEL = smf.ols(formula = 'saleprice~fa1+fa2+fa3', data = test).fit()
+
+
+# In[ ]:
+
+
+model1 = smf.ols(formula='saleprice ~ qualityindex+totalsqftcalc+C(lotconfig)+C(neighborhood)+C(housestyle)+yearbuilt+C(roofstyle)+C(heating)', data=train).fit()
+model1.summary()
+
+
+# In[ ]:
+
+
+predictions_1 = model1.fittedvalues
+predictions_1.head()
+
+
+# In[ ]:
+
+
+test_predictions_1 = model1.predict(test)
+d = {'p_saleprice': test_predictions_1}
+df1 = test[['index']]
+df2=pd.DataFrame(data=d)
+Strouse_TestPredictions_1 = pd.concat([df1,df2],axis = 1, join_axes=[df1.index])
+Strouse_TestPredictions_1.head()
+
+
+# In[ ]:
+
+
+Strouse_TestPredictions_1.to_csv('logan_strouse_HW2_MODEL_1_NBGROUP.csv')
+
+
+# In[ ]:
+
+
+PCA_MODEL = smf.ols(formula='saleprice ~principal_component_1+principal_component_2', data=finalDf).fit()
+PCA_MODEL.summary()
+
+
+# In[ ]:
+
+
+predictions_1 = PCA_MODEL.fittedvalues
+predictions_1.head()
+
+
+# In[ ]:
+
+
+test_predictions_1 = PCA_MODEL.predict(testfinalDf)
+d = {'p_saleprice': test_predictions_1}
+df1 = test[['index']]
+df2=pd.DataFrame(data=d)
+Strouse_TestPredictions_1 = pd.concat([df1,df2],axis = 1, join_axes=[df1.index])
+Strouse_TestPredictions_1.head()
+
+
+# In[ ]:
+
+
+Strouse_TestPredictions_1.to_csv('logan_strouse_HW4_PCA_1_NBGROUP.csv')
+
+
+# In[ ]:
+
+
+neighborhood_predictions = model1.fittedvalues
+neighborhood_predictions.head()
+tr = {'p_saleprice': neighborhood_predictions}
+df1 = train[['index','saleprice','neighborhood','totalsqftcalc']]
+df2=pd.DataFrame(data=tr)
+n_file = pd.concat([df1,df2],axis = 1, join_axes=[df1.index])
+
+n_file['residual'] = (n_file.saleprice-n_file.p_saleprice)
+n_file['actual_ppsf'] = (n_file.saleprice/n_file.totalsqftcalc)
+n_file['predicted_ppsf'] = (n_file.p_saleprice/n_file.totalsqftcalc)
+compare = n_file[['neighborhood','actual_ppsf','predicted_ppsf']]
+compare.head()
+
+
+# In[ ]:
+
+
+group1 = ['GrnHill', 'Blmngtn', 'NridgHt','Somerst','StoneBr','Timber','Gilbert','CollgCr','NoRidge']
+group2 = ['Crawfor','Blueste','SawyerW','Greens','BrkSide','Veenker','Mitchel','IDOTRR','OldTown']
+group3 = ['ClearCr','NWAmes','NPkVill','NAmes','Sawyer','Edwards','BrDale','SWISU','MeadowV']
+c_2 = compare.copy()
+#c_2['Neighborhood_Group'] = c_2['neighborhood'].copy()
+#c_2['Neighborhood_Group'] = c_2['neighborhood'].isin(group1).astype('int64')
+#c_2['Neighborhood_Group'] = c_2['neighborhood'].isin(group2).astype('int64',copy=False)
+#c_2.loc[c_2.Neighborhood_Group == 'CollgCr'] = 1
+#c_2
+conditions = [
+    (c_2['neighborhood'].isin(group1)),
+    (c_2['neighborhood'].isin(group2)),
+    (c_2['neighborhood'].isin(group3))]
+choices = ['1', '2', '3']
+c_2['Neighborhood_Group'] = np.select(conditions, choices, default='NA')
+c_2
+
+
+# In[ ]:
+
+
+import seaborn as sns
+ax = sns.boxplot(x="neighborhood", y="residual", data=n_file)
+ax.set_title("Residual by Neighborhood")
+ax.set_ylabel("Residual")
+ax.set_xlabel("Neighborhood")
+plt.xticks(rotation=75)
+plt.show()
+
+
+# In[ ]:
+
+
+grouping = c_2[['neighborhood','actual_ppsf','predicted_ppsf','Neighborhood_Group']].groupby('neighborhood').mean()
+grouping_sorted = grouping.sort_values(by=['actual_ppsf'], ascending=[False])
+grouping_sorted
+#neighborhoods sorted by actual ppsf
+

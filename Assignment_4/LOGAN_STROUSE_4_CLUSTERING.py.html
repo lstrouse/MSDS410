@@ -1,0 +1,492 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[10]:
+
+
+import pandas as pd
+import numpy as np
+import statsmodels.formula.api as smf
+import matplotlib.pyplot as plt
+
+
+# In[11]:
+
+
+train = pd.read_csv('AMES_TRAIN.csv')
+test = pd.read_csv('AMES_TEST_SFAM.csv')
+train.columns = [s.lower() for s in train.columns]
+test.columns = [s.lower() for s in test.columns]
+train['qualityindex'] = (train.overallqual*train.overallcond)
+train['totalsqftcalc'] = (train.bsmtfinsf1+train.bsmtfinsf2+train.grlivarea)
+train['pricesqfoot'] = (train['saleprice']/train['totalsqftcalc'])
+test['qualityindex'] = (test.overallqual*test.overallcond)
+test['totalsqftcalc'] = (test.bsmtfinsf1+test.bsmtfinsf2+test.grlivarea)
+test['pricesqfoot'] = (test['saleprice']/test['totalsqftcalc'])
+train=train.replace({'totalsqftcalc': {np.NaN : 10000}})
+train=train.replace({'lotarea': {np.NaN : 10000}})
+train=train.replace({'lotfrontage': {np.NaN : 10000}})
+test=test.replace({'totalsqftcalc': {np.NaN : 10000}})
+test=test.replace({'lotarea': {np.NaN : 10000}})
+test=test.replace({'lotfrontage': {np.NaN : 10000}})
+
+
+# In[12]:
+
+
+test['Neighborhood_Group'] = np.nan
+#added due to later work with Neighborhood groupings
+
+
+# In[13]:
+
+
+train = train[train['totalsqftcalc'] < 6000]
+train = train[train['salecondition'] == 'Normal']
+train = train[train['saleprice'] <= 500000]
+train = train[train['lotarea'] <= 25000]
+train = train[train['zoning'] != 'I']
+train = train[train['zoning'] != 'C']
+train = train[train['zoning'] != 'A']
+
+
+# In[14]:
+
+
+X = train[['saleprice','qualityindex','totalsqftcalc','yearbuilt','lotarea','lotfrontage']].copy()
+X1 = train[['qualityindex','totalsqftcalc','yearbuilt','lotarea','lotfrontage']].copy()
+corr = X[X.columns].corr()
+corr
+
+
+# In[48]:
+
+
+from sklearn.preprocessing import StandardScaler
+features = ['qualityindex', 'totalsqftcalc', 'yearbuilt', 'lotarea','lotfrontage']
+# Separating out the features
+x = test.loc[:, features].values
+# Separating out the target
+y = test.loc[:,['saleprice']].values
+# Standardizing the features
+x = StandardScaler().fit_transform(x)
+
+
+# In[49]:
+
+
+from sklearn.decomposition import PCA
+pca = PCA(n_components=2)
+principalComponents = pca.fit_transform(x)
+principalDf = pd.DataFrame(data = principalComponents
+             , columns = ['principal_component_1', 'principal_component_2'])
+
+
+# In[50]:
+
+
+testfinalDf = pd.concat([principalDf, test], axis = 1)
+
+
+# In[52]:
+
+
+testfinalDf
+
+
+# In[38]:
+
+
+from sklearn.preprocessing import StandardScaler
+features = ['qualityindex', 'totalsqftcalc', 'yearbuilt', 'lotarea','lotfrontage']
+# Separating out the features
+x = train.loc[:, features].values
+# Separating out the target
+y = train.loc[:,['saleprice']].values
+# Standardizing the features
+x = StandardScaler().fit_transform(x)
+
+
+# In[39]:
+
+
+from sklearn.decomposition import PCA
+pca = PCA(n_components=2)
+principalComponents = pca.fit_transform(x)
+principalDf = pd.DataFrame(data = principalComponents
+             , columns = ['principal_component_1', 'principal_component_2'])
+
+
+# In[43]:
+
+
+finalDf = pd.concat([principalDf, train], axis = 1)
+
+
+# In[41]:
+
+
+finalDf
+
+
+# In[59]:
+
+
+model1 = smf.ols(formula='saleprice ~ qualityindex+totalsqftcalc+C(lotconfig)+C(neighborhood)+C(housestyle)+yearbuilt+C(roofstyle)+C(heating)', data=train).fit()
+model1.summary()
+
+
+# In[8]:
+
+
+predictions_1 = model1.fittedvalues
+predictions_1.head()
+
+
+# In[9]:
+
+
+test_predictions_1 = model1.predict(test)
+d = {'p_saleprice': test_predictions_1}
+df1 = test[['index']]
+df2=pd.DataFrame(data=d)
+Strouse_TestPredictions_1 = pd.concat([df1,df2],axis = 1, join_axes=[df1.index])
+Strouse_TestPredictions_1.head()
+
+
+# In[62]:
+
+
+Strouse_TestPredictions_1.to_csv('logan_strouse_HW2_MODEL_1_NBGROUP.csv')
+
+
+# In[56]:
+
+
+PCA_MODEL = smf.ols(formula='saleprice ~principal_component_1+principal_component_2', data=finalDf).fit()
+PCA_MODEL.summary()
+
+
+# In[46]:
+
+
+predictions_1 = PCA_MODEL.fittedvalues
+predictions_1.head()
+
+
+# In[57]:
+
+
+test_predictions_1 = PCA_MODEL.predict(testfinalDf)
+d = {'p_saleprice': test_predictions_1}
+df1 = test[['index']]
+df2=pd.DataFrame(data=d)
+Strouse_TestPredictions_1 = pd.concat([df1,df2],axis = 1, join_axes=[df1.index])
+Strouse_TestPredictions_1.head()
+
+
+# In[58]:
+
+
+Strouse_TestPredictions_1.to_csv('logan_strouse_HW4_PCA_1_NBGROUP.csv')
+
+
+# In[61]:
+
+
+neighborhood_predictions = model1.fittedvalues
+neighborhood_predictions.head()
+tr = {'p_saleprice': neighborhood_predictions}
+df1 = train[['index','saleprice','neighborhood','totalsqftcalc']]
+df2=pd.DataFrame(data=tr)
+n_file = pd.concat([df1,df2],axis = 1, join_axes=[df1.index])
+
+n_file['residual'] = (n_file.saleprice-n_file.p_saleprice)
+n_file['actual_ppsf'] = (n_file.saleprice/n_file.totalsqftcalc)
+n_file['predicted_ppsf'] = (n_file.p_saleprice/n_file.totalsqftcalc)
+compare = n_file[['neighborhood','actual_ppsf','predicted_ppsf']]
+compare.head()
+
+
+# In[62]:
+
+
+group1 = ['GrnHill', 'Blmngtn', 'NridgHt','Somerst','StoneBr','Timber','Gilbert','CollgCr','NoRidge']
+group2 = ['Crawfor','Blueste','SawyerW','Greens','BrkSide','Veenker','Mitchel','IDOTRR','OldTown']
+group3 = ['ClearCr','NWAmes','NPkVill','NAmes','Sawyer','Edwards','BrDale','SWISU','MeadowV']
+c_2 = compare.copy()
+#c_2['Neighborhood_Group'] = c_2['neighborhood'].copy()
+#c_2['Neighborhood_Group'] = c_2['neighborhood'].isin(group1).astype('int64')
+#c_2['Neighborhood_Group'] = c_2['neighborhood'].isin(group2).astype('int64',copy=False)
+#c_2.loc[c_2.Neighborhood_Group == 'CollgCr'] = 1
+#c_2
+conditions = [
+    (c_2['neighborhood'].isin(group1)),
+    (c_2['neighborhood'].isin(group2)),
+    (c_2['neighborhood'].isin(group3))]
+choices = ['1', '2', '3']
+c_2['Neighborhood_Group'] = np.select(conditions, choices, default='NA')
+c_2
+
+
+# In[66]:
+
+
+import seaborn as sns
+ax = sns.boxplot(x="neighborhood", y="residual", data=n_file)
+ax.set_title("Residual by Neighborhood")
+ax.set_ylabel("Residual")
+ax.set_xlabel("Neighborhood")
+plt.xticks(rotation=75)
+plt.show()
+
+
+# In[63]:
+
+
+grouping = c_2[['neighborhood','actual_ppsf','predicted_ppsf','Neighborhood_Group']].groupby('neighborhood').mean()
+grouping_sorted = grouping.sort_values(by=['actual_ppsf'], ascending=[False])
+grouping_sorted
+#neighborhoods sorted by actual ppsf
+
+
+# In[64]:
+
+
+grouping_sorted_1 = grouping_sorted.reset_index()
+
+
+# In[65]:
+
+
+grouping_sorted_1.iloc[1:]
+
+
+# In[66]:
+
+
+group1 = ['GrnHill', 'Blmngtn', 'NridgHt','Somerst','StoneBr','Timber','Gilbert','CollgCr','NoRidge']
+group2 = ['Crawfor','Blueste','SawyerW','Greens','BrkSide','Veenker','Mitchel','IDOTRR','OldTown']
+group3 = ['ClearCr','NWAmes','NPkVill','NAmes','Sawyer','Edwards','BrDale','SWISU','MeadowV']
+conditions = [
+    (grouping_sorted_1['neighborhood'].isin(group1)),
+    (grouping_sorted_1['neighborhood'].isin(group2)),
+    (grouping_sorted_1['neighborhood'].isin(group3))]
+choices = ['1', '2', '3']
+grouping_sorted_1['Neighborhood_Group'] = np.select(conditions, choices, default='NA')
+print(grouping_sorted_1)
+
+
+# In[67]:
+
+
+# import packages for this example
+import pandas as pd    
+from collections import OrderedDict  # to create DataFrame with ordered columns
+# special plotting methods
+from pandas.tools.plotting import scatter_matrix    
+import numpy as np  # arrays and math functions
+import matplotlib.pyplot as plt  # static plotting
+from sklearn import preprocessing
+from sklearn.cluster import KMeans
+from sklearn import metrics  # for silhouette coefficient
+
+
+# In[73]:
+
+
+#  Read in the data.
+#used the student terms to make the transition smoother when appyling data from the Ames project. 
+student_data = pd.read_csv('AMES_TRAIN_2.csv')
+
+
+# In[74]:
+
+
+print('')
+print('----- Summary of Input Data -----')
+print('')
+
+# show the object is a DataFrame
+print('Object type: ', type(student_data))
+
+# show number of observations in the DataFrame
+print('Number of observations: ', len(student_data))
+
+# show variable names
+variable = student_data.columns
+print('Variable names: ', variable)
+
+# show descriptive statistics
+pd.set_option('display.max_columns', None)  # do not limit output
+print(student_data.describe())
+
+# show a portion of the beginning of the DataFrame
+print(student_data.head())
+
+print('')
+print('----- K-means Cluster Analysis of Variables -----')
+print('')
+
+
+# In[75]:
+
+
+#standardized_student_data_matrix = preprocessing.scale(student_data)
+variable_cluster_data =  student_data.T 
+
+
+# In[76]:
+
+
+kmeans = KMeans(n_clusters = 5, n_init = 25, random_state = 1)
+kmeans.fit(variable_cluster_data)
+cluster = kmeans.predict(variable_cluster_data)
+
+
+# In[77]:
+
+
+variable_kmeans_solution = pd.DataFrame(OrderedDict([('cluster', cluster)]))
+
+
+# In[78]:
+
+
+for cluster_id in sorted(variable_kmeans_solution.cluster.unique()):
+    print()
+    print(variable_kmeans_solution.loc[variable_kmeans_solution['cluster'] ==         cluster_id])
+
+
+# In[80]:
+
+
+print('Silhouette coefficient for the five-cluster k-means solution: ', 
+    metrics.silhouette_score(variable_cluster_data, cluster, 
+        metric = 'euclidean'))
+
+
+# In[81]:
+
+
+student_cluster_data =  student_data.T
+
+
+# In[82]:
+
+
+for nclusters in range(2,21): # search between 2 and 20 clusters/segments
+    kmeans = KMeans(n_clusters = nclusters, n_init = 25, random_state = 1)
+    kmeans.fit(student_cluster_data)
+    segment = kmeans.predict(student_cluster_data)  # cluster ids for variables
+    print('nclusters: ', nclusters, ' silhouette coefficient: ', 
+        metrics.silhouette_score(student_cluster_data, segment, 
+            metric='euclidean'))
+
+
+# In[116]:
+
+
+print('')
+print('----- Solution for 4 Student Segments -----')
+print('')
+kmeans = KMeans(n_clusters = 4, n_init = 25, random_state = 1)
+kmeans.fit(student_cluster_data)
+segment = kmeans.predict(student_cluster_data)  # cluster index
+
+
+# In[117]:
+
+
+student_kmeans_solution = pd.DataFrame(OrderedDict(
+    [('student', range(0,len(student_cluster_data))),
+    ('segment', segment)]))
+
+
+# In[118]:
+
+
+student_segmentation_data = student_kmeans_solution.join(student_data)
+
+
+# In[119]:
+
+
+for segment_id in sorted(student_segmentation_data.segment.unique()):
+    print()
+    print('Attribute means for segment: ', segment_id)
+    this_student_segment_data = student_segmentation_data[         student_segmentation_data.segment == segment_id]
+    attributes = this_student_segment_data.ix[:,'SubClass':'SalePrice'].mean()    
+    print(attributes)
+
+
+# In[120]:
+
+
+centers = kmeans.cluster_centers_
+centers=centers.T
+# turn centers into a df so we can plot the results 
+d1 = pd.DataFrame({'zero': centers[:,0]})
+d2 = pd.DataFrame({'one': centers[:,1]})
+d = d1.join(d2) #column zero and one will be the two groups
+
+
+# In[104]:
+
+
+import seaborn as sns
+data = pd.concat(
+    [
+        train.groupby('neighborhood').mean()['saleprice']
+    ], 
+    
+    axis=1)
+f, ax = plt.subplots()
+sns.stripplot(data.sort_values(by='saleprice').saleprice, data.sort_values(by='saleprice').index, orient='h', color='red');
+
+
+# In[106]:
+
+
+neighbors_mean = data.sort_values(by='saleprice').saleprice
+
+from sklearn.cluster import KMeans
+kmeans = KMeans(n_clusters=4, random_state=50).fit(neighbors_mean.values.reshape(-1, 1))
+
+
+# In[115]:
+
+
+kmeans.labels_
+
+
+# In[109]:
+
+
+neighborhood_clusters = pd.concat(
+    [
+        neighbors_mean, 
+        pd.Series(kmeans.labels_, index=neighbors_mean.index, name='Cluster')
+    ],
+    axis=1)
+
+
+# In[112]:
+
+
+def neighborhood_to_cluster(neigh_string):
+    return int(neighborhood_clusters[ neighborhood_clusters.index==neigh_string ]['Cluster'].values)
+train['Neighborhood_cluster'] =  train['neighborhood'].apply(neighborhood_to_cluster)
+
+
+# In[ ]:
+
+
+sns.boxplot(df['condition'], df['saleprice'])
+
+
+# In[ ]:
+
+
+
+
